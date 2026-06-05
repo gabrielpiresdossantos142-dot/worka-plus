@@ -38,9 +38,16 @@ export async function POST(req: NextRequest) {
     // Manda
     const sent = await sendVerificationCode(email, code);
     if (!sent.ok) {
-      // Em dev sem Resend, ainda retorna ok mas com flag — pra você ver o código no log
       console.log(`[email send failed] code for ${email} is ${code} (${sent.error})`);
-      return badRequest(sent.error ?? "Erro ao enviar email");
+      // Traduz erros conhecidos do Resend pra mensagens amigáveis em PT
+      const err = (sent.error || "").toLowerCase();
+      if (err.includes("only send testing emails to your own")) {
+        return badRequest("No momento, só conseguimos mandar email pro endereço do administrador. Verifique um domínio no Resend pra liberar pra todos.");
+      }
+      if (err.includes("domain") && err.includes("verify")) {
+        return badRequest("Domínio do remetente não verificado. Configure no painel do Resend.");
+      }
+      return badRequest("Não foi possível enviar o email no momento. Tente daqui a pouco.");
     }
 
     return json({ ok: true });
