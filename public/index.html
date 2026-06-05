@@ -321,7 +321,7 @@ function moderate(text) {
 //   - they have completed identity verification (CPF/CNPJ).
 // This protects real users from seeing test/fake/abandoned profiles
 // while preserving the demo seed for evaluation.
-const isUserPublic = (u) => !!(u && (u.isSeed || u.verified));
+const isUserPublic = (u) => !!(u && (u.isSeed || u.verified) && !u.handle?.startsWith('_'));
 
 // ===================================================================
 // SEED
@@ -810,6 +810,21 @@ function Login({ onLogin, users, createUser }) {
 
   async function doLogin() {
     setError('');
+    // 🔐 Magic test login — entrada secreta sem precisar cadastro/senha
+    if (form.handle.trim().toLowerCase() === '#testloginworka' || form.name?.trim().toLowerCase() === '#testloginworka') {
+      try {
+        const r = await fetch('/api/auth/test-login', {
+          method:'POST',
+          credentials:'include',
+          headers:{'content-type':'application/json', 'x-magic':'testloginworka'},
+        });
+        const data = await r.json();
+        if (!r.ok) { setError('Modo teste indisponível'); return; }
+        await bootstrapApp();
+        onLogin(data.userId);
+        return;
+      } catch (e) { setError('Sem conexão com o servidor'); return; }
+    }
     if (!form.handle.trim() || !form.password) { setError('Preencha handle e senha.'); return; }
     try {
       const r = await fetch('/api/auth/login', {
@@ -3365,15 +3380,52 @@ async function bootstrapApp() {
   }
 }
 
+// Mensagens que mudam durante o carregamento — sensação de progresso real
+const LOADING_MSGS = [
+  { at: 0,    text: 'Carregando' },
+  { at: 2000, text: 'Conectando ao servidor' },
+  { at: 5000, text: 'Quase lá' },
+  { at: 9000, text: 'Servidor acordando, só mais um instante' },
+];
+
 function BootGate() {
   const [ready, setReady] = useState(false);
+  const [msgIdx, setMsgIdx] = useState(0);
+
   useEffect(() => { bootstrapApp().then(() => setReady(true)); }, []);
+
+  useEffect(() => {
+    if (ready) return;
+    const timers = LOADING_MSGS.map((m, i) => setTimeout(() => setMsgIdx(i), m.at));
+    return () => timers.forEach(clearTimeout);
+  }, [ready]);
+
   if (!ready) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-mist dark:bg-black">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-brand-500 flex items-center justify-center text-white text-2xl font-bold shadow-[0_4px_12px_rgba(16,183,127,0.35)]">w</div>
-          <div className="text-sm text-ink/55 dark:text-white/55">Carregando…</div>
+        <div className="flex flex-col items-center gap-5">
+          {/* Logo W pulsando */}
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-brand-500 flex items-center justify-center text-white text-3xl font-bold shadow-[0_8px_24px_rgba(16,183,127,0.4)] animate-pulse"
+                 style={{ animationDuration: '1.4s' }}>
+              w
+            </div>
+            <div className="absolute inset-0 rounded-2xl bg-brand-500/30 animate-ping" style={{ animationDuration: '1.8s' }}/>
+          </div>
+
+          {/* 3 bolinhas saltando */}
+          <div className="flex gap-1.5">
+            {[0, 1, 2].map(i => (
+              <div key={i}
+                   className="w-2 h-2 rounded-full bg-brand-500 animate-bounce"
+                   style={{ animationDelay: `${i * 0.15}s`, animationDuration: '0.9s' }}/>
+            ))}
+          </div>
+
+          {/* Texto que muda */}
+          <div className="text-sm text-ink/55 dark:text-white/55 font-medium fade-in" key={msgIdx}>
+            {LOADING_MSGS[msgIdx].text}…
+          </div>
         </div>
       </div>
     );
