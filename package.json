@@ -13,7 +13,9 @@
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset --force"
   },
-  "prisma": { "seed": "tsx prisma/seed.ts" },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
@@ -21,6 +23,7 @@
     "next": "^14.2.18",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "resend": "^6.12.4",
     "zod": "^3.23.8"
   },
   "devDependencies": {

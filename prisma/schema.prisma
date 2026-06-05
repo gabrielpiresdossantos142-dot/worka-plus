@@ -289,3 +289,16 @@ model Notification {
 
   @@index([userId, read, createdAt])
 }
+
+model EmailVerification {
+  id        String    @id @default(cuid())
+  email     String
+  code      String    // 6 dígitos
+  expiresAt DateTime
+  usedAt    DateTime?
+  attempts  Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
+}

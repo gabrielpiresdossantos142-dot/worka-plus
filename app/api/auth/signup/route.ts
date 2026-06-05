@@ -50,6 +50,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Camada 3 — verificação de email (precisa ter usado código nos últimos 30min)
+    const emailLower = d.email.toLowerCase();
+    const verifiedRecord = await db.emailVerification.findFirst({
+      where: {
+        email: emailLower,
+        usedAt: { gt: new Date(Date.now() - 30 * 60 * 1000) }, // usado nos últimos 30min
+      },
+      orderBy: { usedAt: "desc" },
+    });
+    if (!verifiedRecord) {
+      return badRequest("Email não verificado. Confirme o código que mandamos antes de continuar.");
+    }
+
     const conflictHit = await db.user.findFirst({
       where: { OR: [
         { handle: d.handle.toLowerCase() },
