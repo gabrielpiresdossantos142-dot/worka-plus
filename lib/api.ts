@@ -15,9 +15,7 @@ export function conflict(msg: string) {
 }
 export function serverError(e: unknown) {
   console.error(e);
-  // Temporário: expõe o erro real pra debug em produção. Remover depois.
-  const msg = e instanceof Error ? e.message : String(e);
-  return NextResponse.json({ error: "Erro interno", _debug: msg }, { status: 500 });
+  return NextResponse.json({ error: "Erro interno" }, { status: 500 });
 }
 
 export async function requireSession(): Promise<Session | NextResponse> {
