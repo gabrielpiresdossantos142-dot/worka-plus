@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" rx="0" fill="#10b77f"/>
+  <text x="512" y="745"
+        font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, Arial, sans-serif"
+        font-weight="900"
+        font-size="720"
+        fill="#ffffff"
+        text-anchor="middle"
+        letter-spacing="-30">w</text>
+</svg>

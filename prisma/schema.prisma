@@ -1,0 +1,291 @@
+// Worka+ — Postgres schema (Supabase)
+// Migration source of truth. Frontend ainda é www/index.html — esta camada
+// só serve dados via API.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserType {
+  EMPRESA
+  FREELANCER
+  AMBOS
+}
+
+enum DocType {
+  CPF
+  CNPJ
+}
+
+enum TaskStatus {
+  RASCUNHO
+  ABERTA
+  EM_ANDAMENTO
+  EM_REVISAO
+  CONCLUIDA
+  CANCELADA
+}
+
+enum TxStatus {
+  EM_CUSTODIA
+  LIBERADO
+  PAGO
+  REEMBOLSADO
+}
+
+enum MatchMode {
+  SMART
+  RACE
+}
+
+enum DeliveryStatus {
+  AGUARDANDO
+  APROVADA
+  REVISAO_SOLICITADA
+}
+
+model User {
+  id            String    @id @default(cuid())
+  handle        String    @unique
+  email         String    @unique
+  passwordHash  String
+  name          String
+  type          UserType
+  companyName   String?
+  bio           String?
+  avatarUrl     String?
+  bannerUrl     String?
+  avatarColor   String    @default("#10b77f")
+  hourlyRate    Int?      // centavos
+
+  docType       DocType?
+  docNumber     String?   @unique
+  verified      Boolean   @default(false)
+  verifiedAt    DateTime?
+
+  isSeed        Boolean   @default(false)
+
+  skills          Skill[]
+  experiences     Experience[]
+  ownedTasks      Task[]      @relation("owner")
+  assignedTasks   Task[]      @relation("assignee")
+  reviewsGiven    Review[]    @relation("reviewer")
+  reviewsReceived Review[]    @relation("reviewee")
+  messagesSent    Message[]
+  participantIn   ConversationParticipant[]
+  notifications   Notification[]
+  questionsAsked  Question[]
+  txOut           Transaction[] @relation("from")
+  txIn            Transaction[] @relation("to")
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([type])
+  @@index([verified])
+}
+
+model Skill {
+  id      Int    @id @default(autoincrement())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name    String
+
+  @@index([userId])
+  @@index([name])
+}
+
+model Experience {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String
+  company   String
+  startDate String
+  endDate   String
+  order     Int      @default(0)
+
+  @@index([userId])
+}
+
+model Task {
+  id              String      @id @default(cuid())
+  ownerId         String
+  owner           User        @relation("owner", fields: [ownerId], references: [id])
+  assigneeId      String?
+  assignee        User?       @relation("assignee", fields: [assigneeId], references: [id])
+
+  title           String
+  description     String
+  category        String
+  matchMode       MatchMode   @default(SMART)
+  status          TaskStatus  @default(ABERTA)
+  complexity      String
+  estimatedHours  Int
+  suggestedPrice  Int         // centavos
+  finalPrice      Int         // centavos
+  briefing        String
+  maxRevisions    Int         @default(2)
+
+  checklist       ChecklistItem[]
+  deliveries      Delivery[]
+  questions       Question[]
+  reviews         Review[]
+  transactions    Transaction[]
+
+  createdAt       DateTime    @default(now())
+  completedAt     DateTime?
+
+  @@index([status, createdAt])
+  @@index([ownerId])
+  @@index([assigneeId])
+  @@index([category])
+}
+
+model ChecklistItem {
+  id      String  @id @default(cuid())
+  taskId  String
+  task    Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  text    String
+  done    Boolean @default(false)
+  order   Int     @default(0)
+
+  @@index([taskId])
+}
+
+model Delivery {
+  id            String         @id @default(cuid())
+  taskId        String
+  task          Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  version       Int
+  summary       String
+  status        DeliveryStatus
+  revisionNote  String?
+  files         DeliveryFile[]
+  createdAt     DateTime       @default(now())
+  decidedAt     DateTime?
+
+  @@index([taskId, version])
+}
+
+model DeliveryFile {
+  id          String   @id @default(cuid())
+  deliveryId  String
+  delivery    Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  name        String
+  mime        String
+  size        Int
+  url         String
+
+  @@index([deliveryId])
+}
+
+model Question {
+  id          String   @id @default(cuid())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  askerId     String
+  asker       User     @relation(fields: [askerId], references: [id])
+  text        String
+  answer      String?
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  answeredAt  DateTime?
+
+  @@index([taskId])
+  @@index([askerId])
+}
+
+model Conversation {
+  id           String                    @id @default(cuid())
+  participants ConversationParticipant[]
+  messages     Message[]
+  lastMessage  String?
+  lastAt       DateTime                  @default(now())
+  createdAt    DateTime                  @default(now())
+
+  @@index([lastAt])
+}
+
+model ConversationParticipant {
+  conversationId String
+  userId         String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id              String       @id @default(cuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  fromId          String
+  from            User         @relation(fields: [fromId], references: [id])
+  text            String
+  attachmentUrl   String?
+  attachmentName  String?
+  attachmentMime  String?
+  attachmentSize  Int?
+  read            Boolean      @default(false)
+  deleted         Boolean      @default(false)
+  deletedAt       DateTime?
+  createdAt       DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([fromId])
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  reviewerId  String
+  reviewer    User     @relation("reviewer", fields: [reviewerId], references: [id])
+  revieweeId  String
+  reviewee    User     @relation("reviewee", fields: [revieweeId], references: [id])
+  rating      Int
+  comment     String
+  createdAt   DateTime @default(now())
+
+  @@unique([taskId, reviewerId])
+  @@index([revieweeId])
+}
+
+model Transaction {
+  id          String    @id @default(cuid())
+  taskId      String
+  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fromId      String
+  from        User      @relation("from", fields: [fromId], references: [id])
+  toId        String
+  to          User      @relation("to", fields: [toId], references: [id])
+  gross       Int
+  fee         Int
+  net         Int
+  status      TxStatus  @default(EM_CUSTODIA)
+  releasedAt  DateTime?
+  paidAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([fromId])
+  @@index([toId])
+  @@index([taskId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read, createdAt])
+}
