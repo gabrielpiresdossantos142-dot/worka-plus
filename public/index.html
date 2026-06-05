@@ -795,9 +795,40 @@ function maskDoc(value, isCnpj) {
     .replace(/(\d{3})(\d)/, '$1.$2')
     .replace(/(\d{3})(\d)/, '$1-$2');
 }
+// Validação completa (matemática) de CPF/CNPJ — mesma lógica do servidor.
+// Server tem a Camada 2 (BrasilAPI pra CNPJ) que cliente não tem.
+function _validCPF(d) {
+  if (d.length !== 11) return false;
+  if (/^(\d)\1+$/.test(d)) return false;
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += parseInt(d[i]) * (10 - i);
+  let mod = (sum * 10) % 11; if (mod === 10) mod = 0;
+  if (mod !== parseInt(d[9])) return false;
+  sum = 0;
+  for (let i = 0; i < 10; i++) sum += parseInt(d[i]) * (11 - i);
+  mod = (sum * 10) % 11; if (mod === 10) mod = 0;
+  return mod === parseInt(d[10]);
+}
+function _validCNPJ(d) {
+  if (d.length !== 14) return false;
+  if (/^(\d)\1+$/.test(d)) return false;
+  const w1 = [5,4,3,2,9,8,7,6,5,4,3,2];
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += parseInt(d[i]) * w1[i];
+  let mod = sum % 11;
+  const dv1 = mod < 2 ? 0 : 11 - mod;
+  if (dv1 !== parseInt(d[12])) return false;
+  const w2 = [6,5,4,3,2,9,8,7,6,5,4,3,2];
+  sum = 0;
+  for (let i = 0; i < 13; i++) sum += parseInt(d[i]) * w2[i];
+  mod = sum % 11;
+  const dv2 = mod < 2 ? 0 : 11 - mod;
+  return dv2 === parseInt(d[13]);
+}
 function validateDoc(value, isCnpj) {
   const d = (value || '').replace(/\D/g, '');
-  return d.length === (isCnpj ? 14 : 11);
+  if (d.length !== (isCnpj ? 14 : 11)) return false;
+  return isCnpj ? _validCNPJ(d) : _validCPF(d);
 }
 
 function Login({ onLogin, users, createUser }) {
@@ -846,7 +877,15 @@ function Login({ onLogin, users, createUser }) {
     if (!form.handle.trim() || !form.name.trim()) { setError('Preencha handle e nome.'); return; }
     if ((form.password || '').length < 6) { setError('Senha precisa ter pelo menos 6 caracteres.'); return; }
     const isCnpj = form.type === 'empresa';
-    if (!validateDoc(form.docNumber, isCnpj)) { setError(`${isCnpj?'CNPJ':'CPF'} é obrigatório e precisa ter ${isCnpj?14:11} dígitos.`); return; }
+    if (!validateDoc(form.docNumber, isCnpj)) {
+  const digits = (form.docNumber||'').replace(/\D/g,'');
+  if (digits.length !== (isCnpj?14:11)) {
+    setError(`${isCnpj?'CNPJ':'CPF'} precisa ter ${isCnpj?14:11} dígitos.`);
+  } else {
+    setError(`${isCnpj?'CNPJ':'CPF'} inválido. Confere se digitou direito.`);
+  }
+  return;
+}
     try {
       const r = await fetch('/api/auth/signup', {
         method:'POST',
@@ -978,7 +1017,15 @@ function Login({ onLogin, users, createUser }) {
                   <Button className="w-full" onClick={() => {
                     const isCnpj = form.type === 'empresa';
                     if (!form.handle||!form.name) { setError('Handle e nome são obrigatórios'); return; }
-                    if (!validateDoc(form.docNumber, isCnpj)) { setError(`${isCnpj?'CNPJ':'CPF'} é obrigatório e precisa ter ${isCnpj?14:11} dígitos.`); return; }
+                    if (!validateDoc(form.docNumber, isCnpj)) {
+  const digits = (form.docNumber||'').replace(/\D/g,'');
+  if (digits.length !== (isCnpj?14:11)) {
+    setError(`${isCnpj?'CNPJ':'CPF'} precisa ter ${isCnpj?14:11} dígitos.`);
+  } else {
+    setError(`${isCnpj?'CNPJ':'CPF'} inválido. Confere se digitou direito.`);
+  }
+  return;
+}
                     setError(''); setStep(2);
                   }}>Continuar</Button>
                   {error && <p className="text-rose-600 text-xs">{error}</p>}

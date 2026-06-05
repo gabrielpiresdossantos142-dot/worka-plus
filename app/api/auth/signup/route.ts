@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { createSession } from "@/lib/auth";
 import { badRequest, conflict, json, serverError } from "@/lib/api";
+import { validCPF, validCNPJ, checkCNPJExists } from "@/lib/doc-validation";
 
 const COLORS = ["#10b981", "#6366f1", "#f59e0b", "#ec4899", "#0ea5e9", "#a855f7"];
 
@@ -31,6 +32,24 @@ export async function POST(req: NextRequest) {
       return badRequest(`${isCnpj ? "CNPJ" : "CPF"} precisa ter ${isCnpj ? 14 : 11} dígitos`);
     }
 
+    // Camada 1 — algoritmo matemático (offline)
+    const validFn = isCnpj ? validCNPJ : validCPF;
+    if (!validFn(docDigits)) {
+      return badRequest(`${isCnpj ? "CNPJ" : "CPF"} inválido. Confere se digitou direito.`);
+    }
+
+    // Camada 2 — BrasilAPI pra CNPJ (a empresa existe na Receita?)
+    let companyNameFromReceita: string | undefined;
+    if (isCnpj) {
+      const check = await checkCNPJExists(docDigits);
+      if (!check.ok && check.reason === "not-found") {
+        return badRequest("CNPJ não encontrado na Receita Federal.");
+      }
+      if (check.ok && !check._skipped) {
+        companyNameFromReceita = check.companyName;
+      }
+    }
+
     const conflictHit = await db.user.findFirst({
       where: { OR: [
         { handle: d.handle.toLowerCase() },
@@ -55,6 +74,7 @@ export async function POST(req: NextRequest) {
         passwordHash: hash,
         name: d.name.trim(),
         type: d.type,
+        companyName: isCnpj ? (companyNameFromReceita ?? d.name.trim()) : null,
         bio: d.bio?.trim() || null,
         hourlyRate: d.type !== "EMPRESA" ? (d.hourlyRate ?? null) : null,
         docType: isCnpj ? "CNPJ" : "CPF",
