@@ -75,10 +75,62 @@
   .tappable { transition: transform 0.12s cubic-bezier(0.32, 0.72, 0, 1); }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
+
+  /* Pre-React loader — aparece IMEDIATAMENTE antes do Babel/React carregarem.
+     Some quando React renderizar o BootGate (que substitui o conteúdo do #root). */
+  #boot-loader {
+    position: fixed; inset: 0;
+    background: #fafbfc;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 20px;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+  }
+  #boot-loader .logo {
+    width: 64px; height: 64px;
+    border-radius: 18px;
+    background: #10b77f;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 32px; font-weight: 900;
+    box-shadow: 0 8px 24px rgba(16,183,127,0.4);
+    animation: bootPulse 1.4s ease-in-out infinite;
+  }
+  #boot-loader .dots {
+    display: flex; gap: 6px;
+  }
+  #boot-loader .dots span {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #10b77f;
+    animation: bootBounce 0.9s infinite;
+  }
+  #boot-loader .dots span:nth-child(2) { animation-delay: 0.15s; }
+  #boot-loader .dots span:nth-child(3) { animation-delay: 0.3s; }
+  #boot-loader .msg {
+    font-size: 13px; color: rgba(10,10,10,0.55); font-weight: 500;
+  }
+  @keyframes bootPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50%      { transform: scale(1.05); opacity: 0.85; }
+  }
+  @keyframes bootBounce {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
+  }
+  @media (prefers-color-scheme: dark) {
+    #boot-loader { background: #000; }
+    #boot-loader .msg { color: rgba(255,255,255,0.55); }
+  }
 </style>
 </head>
 <body class="bg-mist text-ink dark:bg-black dark:text-white">
-<div id="root"></div>
+<div id="root">
+  <!-- Loader CSS-puro, mostrado durante Babel compilar + React montar.
+       Substituído automaticamente quando React renderizar dentro do #root. -->
+  <div id="boot-loader">
+    <div class="logo">w</div>
+    <div class="dots"><span></span><span></span><span></span></div>
+    <div class="msg">Carregando…</div>
+  </div>
+</div>
 
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useMemo, useRef, createContext, useContext } = React;
