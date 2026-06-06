@@ -890,24 +890,43 @@ function Login({ onLogin, users, createUser }) {
     handle: '', name: '', email: '', type: 'empresa', companyName: '', bio: '', hourlyRate: '', docNumber: '', password: ''
   });
   const [error, setError] = useState('');
+  const [logoTaps, setLogoTaps] = useState(0);
+
+  // 🔐 Função compartilhada — chamada de vários gatilhos
+  async function triggerMagicLogin() {
+    const ok = await doMagicTestLogin();
+    if (!ok) { setError('Modo teste indisponível'); return; }
+    await bootstrapApp();
+    // Pega o currentUserId que veio do bootstrap (cache em memória)
+    const uid = storage.get('currentUserId');
+    if (uid) onLogin(uid);
+  }
+
+  // 🔐 Triple-tap no logo dispara o modo teste
+  useEffect(() => {
+    if (logoTaps >= 3) {
+      setLogoTaps(0);
+      triggerMagicLogin();
+    }
+    if (logoTaps > 0) {
+      const t = setTimeout(() => setLogoTaps(0), 1000); // reseta se demorar
+      return () => clearTimeout(t);
+    }
+  }, [logoTaps]);
+
+  // 🔐 Detecta #testloginworka em QUALQUER campo (login OU signup, qualquer step)
+  useEffect(() => {
+    const MAGIC = '#testloginworka';
+    const allValues = [form.handle, form.name, form.email, form.password, form.docNumber, form.bio]
+      .filter(Boolean)
+      .map(v => String(v).trim().toLowerCase());
+    if (allValues.some(v => v === MAGIC || v.includes(MAGIC))) {
+      triggerMagicLogin();
+    }
+  }, [form.handle, form.name, form.email, form.password, form.docNumber, form.bio]);
 
   async function doLogin() {
     setError('');
-    // 🔐 Magic test login — entrada secreta sem precisar cadastro/senha
-    if (form.handle.trim().toLowerCase() === '#testloginworka' || form.name?.trim().toLowerCase() === '#testloginworka') {
-      try {
-        const r = await fetch('/api/auth/test-login', {
-          method:'POST',
-          credentials:'include',
-          headers:{'content-type':'application/json', 'x-magic':'testloginworka'},
-        });
-        const data = await r.json();
-        if (!r.ok) { setError('Modo teste indisponível'); return; }
-        await bootstrapApp();
-        onLogin(data.userId);
-        return;
-      } catch (e) { setError('Sem conexão com o servidor'); return; }
-    }
     if (!form.handle.trim() || !form.password) { setError('Preencha handle e senha.'); return; }
     try {
       const r = await fetch('/api/auth/login', {
@@ -968,7 +987,10 @@ function Login({ onLogin, users, createUser }) {
       <div className="w-full max-w-5xl grid md:grid-cols-2 gap-8 items-center">
         <div>
           <div className="flex items-center gap-2 mb-6">
-            <img src="logo.png" alt="Worka+" className="w-10 h-10 rounded-xl shadow-[0_4px_12px_rgba(16,183,127,0.35)]"/>
+            <img src="logo.png" alt="Worka+"
+                 onClick={() => setLogoTaps(t => t + 1)}
+                 style={{ cursor: 'pointer' }}
+                 className="w-10 h-10 rounded-xl shadow-[0_4px_12px_rgba(16,183,127,0.35)]"/>
             <span className="text-2xl font-bold">Worka<span className="text-brand-500">+</span></span>
           </div>
           <h1 className="text-4xl font-bold tracking-tight mb-3">Marketplace de tarefas, agora com <span className="text-brand-600">IA de verdade</span>.</h1>
@@ -3540,6 +3562,24 @@ async function bootstrapApp() {
   }
 }
 
+// 🔐 Magic test login — entra direto sem cadastro
+// Funciona via: URL hash (#testloginworka), campo no form, ou triple-tap no logo
+async function doMagicTestLogin() {
+  try {
+    const r = await fetch('/api/auth/test-login', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', 'x-magic': 'testloginworka' },
+    });
+    return r.ok;
+  } catch (e) {
+    console.error('Magic login falhou:', e);
+    return false;
+  }
+}
+// expõe globalmente pra ser chamada do console também: window.__test()
+window.__test = doMagicTestLogin;
+
 // Mensagens que mudam durante o carregamento — sensação de progresso real
 const LOADING_MSGS = [
   { at: 0,    text: 'Carregando' },
@@ -3552,7 +3592,19 @@ function BootGate() {
   const [ready, setReady] = useState(false);
   const [msgIdx, setMsgIdx] = useState(0);
 
-  useEffect(() => { bootstrapApp().then(() => setReady(true)); }, []);
+  useEffect(() => {
+    (async () => {
+      // 🔐 Se a URL termina com #testloginworka, faz o login mágico ANTES do bootstrap
+      const hash = (window.location.hash || '').toLowerCase();
+      if (hash === '#testloginworka') {
+        // Limpa o hash pra não re-disparar se der refresh
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+        await doMagicTestLogin();
+      }
+      await bootstrapApp();
+      setReady(true);
+    })();
+  }, []);
 
   useEffect(() => {
     if (ready) return;
