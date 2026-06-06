@@ -891,15 +891,23 @@ function Login({ onLogin, users, createUser }) {
   });
   const [error, setError] = useState('');
   const [logoTaps, setLogoTaps] = useState(0);
+  const magicFiredRef = useRef(false);
 
   // 🔐 Função compartilhada — chamada de vários gatilhos
   async function triggerMagicLogin() {
-    const ok = await doMagicTestLogin();
-    if (!ok) { setError('Modo teste indisponível'); return; }
+    if (magicFiredRef.current) return; // guarda contra disparo duplo
+    magicFiredRef.current = true;
+    const res = await doMagicTestLogin();
+    if (!res.ok) {
+      magicFiredRef.current = false; // libera pra tentar de novo
+      setError('Modo teste indisponível');
+      return;
+    }
     await bootstrapApp();
-    // Pega o currentUserId que veio do bootstrap (cache em memória)
-    const uid = storage.get('currentUserId');
+    // Prefere o userId do servidor; cai pro cache se necessário
+    const uid = res.userId || storage.get('currentUserId');
     if (uid) onLogin(uid);
+    else { magicFiredRef.current = false; setError('Modo teste: sem userId'); }
   }
 
   // 🔐 Triple-tap no logo dispara o modo teste
@@ -3564,6 +3572,7 @@ async function bootstrapApp() {
 
 // 🔐 Magic test login — entra direto sem cadastro
 // Funciona via: URL hash (#testloginworka), campo no form, ou triple-tap no logo
+// Retorna { ok, userId } pra o caller usar direto sem precisar de bootstrap.
 async function doMagicTestLogin() {
   try {
     const r = await fetch('/api/auth/test-login', {
@@ -3571,13 +3580,15 @@ async function doMagicTestLogin() {
       credentials: 'include',
       headers: { 'content-type': 'application/json', 'x-magic': 'testloginworka' },
     });
-    return r.ok;
+    if (!r.ok) return { ok: false };
+    const data = await r.json().catch(() => ({}));
+    return { ok: true, userId: data.userId };
   } catch (e) {
     console.error('Magic login falhou:', e);
-    return false;
+    return { ok: false };
   }
 }
-// expõe globalmente pra ser chamada do console também: window.__test()
+// expõe globalmente pra debug do console: window.__test()
 window.__test = doMagicTestLogin;
 
 // Mensagens que mudam durante o carregamento — sensação de progresso real
